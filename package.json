@@ -10,6 +10,7 @@
   "license": "ISC",
   "devDependencies": {
     "eslint": "^7.0.0",
+    "eslint-config-wordpress": "^2.0.0",
     "gulp": "^4.0.2",
     "jquery": "^3.5.1",
     "jshint": "^2.11.1",
