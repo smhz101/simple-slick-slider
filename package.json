@@ -1,0 +1,20 @@
+{
+  "name": "simple-slick-slider",
+  "version": "1.0.0",
+  "description": "simple slick slider wordpress plugin",
+  "main": "index.js",
+  "private": true,
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "gulp": "^4.0.2",
+    "jquery": "^3.5.1",
+    "jshint": "^2.11.1",
+    "popper.js": "^1.16.1"
+  },
+  "dependencies": {
+    "bootstrap": "^4.5.0"
+  }
+}
