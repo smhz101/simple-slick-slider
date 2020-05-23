@@ -9,6 +9,9 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@babel/core": "^7.9.6",
+    "@babel/preset-env": "^7.9.6",
+    "@babel/register": "^7.9.0",
     "eslint": "^7.0.0",
     "eslint-config-wordpress": "^2.0.0",
     "gulp": "^4.0.2",
