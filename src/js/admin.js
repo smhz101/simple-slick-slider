@@ -1,6 +1,7 @@
-import $ from 'jquery';
 import 'bootstrap';
+import $ from 'jquery';
 
-$( document ).ready( () => {
-	console.log( 'admin loading ... server... is good now' );
+// document ready
+$( () => {
+	console.log( 'hello world!' );
 });
