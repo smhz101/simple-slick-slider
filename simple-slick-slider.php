@@ -23,9 +23,10 @@ define('SSS_PLUGIN_MAIN_PATH', plugin_dir_path(__FILE__));
 /// Admin Enqueue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 function sss_admin_enqueue() {
-	wp_enqueue_script('sss-bootstrap-admin-loader', SSS_PLUGIN_URL . '', ['jquery'], SSS_VERSION, ture );
+	wp_enqueue_style('sss-css-loader', SSS_PLUGIN_URL . '/dist/css/admin.css', [], SSS_VERSION );
+	wp_enqueue_script('sss-js-loader', SSS_PLUGIN_URL . '/dist/js/admin.js', ['jquery'], SSS_VERSION );
 }
-add_action('wp_admin_enqueue', 'sss_admin_enqueue');
+add_action('admin_enqueue_scripts', 'sss_admin_enqueue');
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -123,7 +124,7 @@ function simple_slick_slider_metabox_callback ( $post ) {
 <!--		</div>-->
 		<div class="slide-pannels">
 			<p>
-				<button class="button button-primary">Add a slide</button>
+				<button class="btn btn-primary">Add a slide</button>
 			</p>
 			<div class="accordion" id="accordionExample">
 				<div class="card">
