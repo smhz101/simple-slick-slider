@@ -1,4 +1,4 @@
-$primary: lightblue;
+//$primary: lightblue;
 
 @import "../../node_modules/bootstrap/scss/bootstrap";
 
@@ -8,7 +8,10 @@ simple-slick-slider edit.php
 .accordion > .card {
 	padding: 0;
 	margin-top: 0;
+	max-width: 100%;
+}
+.accordion > .card > .card-header {
+	padding: 0;
 }
 .accordion > .card > .card-header > h2 {
-	font-size: inherit;
 }

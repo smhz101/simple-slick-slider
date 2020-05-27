@@ -11,6 +11,7 @@ import gulpif from 'gulp-if';
 import postcss from 'gulp-postcss';
 import sourcemaps from 'gulp-sourcemaps';
 import autoprefixer from 'autoprefixer';
+import lineec from 'gulp-line-ending-corrector';
 
 // image
 import imagemin from 'gulp-imagemin';
@@ -18,6 +19,8 @@ import imagemin from 'gulp-imagemin';
 // scripts
 import webpack from 'webpack-stream';
 import named from 'vinyl-named';
+
+import wpPot from 'gulp-wp-pot';
 
 // browser
 import browserSync from 'browser-sync';
@@ -42,24 +45,36 @@ export const reload = done => {
 };
 
 export const styles = () => {
-	return src([ 'src/scss/bundle.scss', 'src/scss/admin.scss' ])
+	return src([ 'src/scss/admin.scss', 'src/scss/public.scss' ])
 		.pipe( gulpif( ! PRODUCTION, sourcemaps.init() ) )
 		.pipe( sass().on( 'error', sass.logError ) )
 		.pipe( gulpif( PRODUCTION, postcss([ autoprefixer ]) ) )
-		.pipe( gulpif( PRODUCTION, cleanCss({compatibility: 'ie8' }) ) )
+		.pipe( gulpif( PRODUCTION, cleanCss({ compatibility: 'ie8' }) ) )
 		.pipe( gulpif( ! PRODUCTION, sourcemaps.write() ) )
+		.pipe( lineec() )
 		.pipe( dest( 'dist/css' ) )
 		.pipe( server.stream() );
 };
 
 export const images = () => {
 	return src( 'src/images/**/*.{jpg,jpeg,png,svg,gif}' )
-		.pipe( gulpif( PRODUCTION, imagemin() ) )
+		.pipe(
+			gulpif( PRODUCTION,
+				imagemin([
+					imagemin.gifsicle({ interlaced: true }),
+					imagemin.mozjpeg({ progressive: true }),
+					imagemin.optipng({ optimizationLevel: 3 }), // 0-7 low-high.
+					imagemin.svgo({
+						plugins: [ { removeViewBox: true }, { cleanupIDs: false } ]
+					})
+				])
+			)
+		)
 		.pipe( dest( 'dist/images' ) );
 };
 
 export const scripts = () => {
-	return src([ 'src/js/bundle.js', 'src/js/admin.js' ])
+	return src([ 'src/js/admin.js', 'src/js/public.js' ])
 		.pipe( named() )
 		.pipe( webpack({
 			module: {
@@ -103,6 +118,17 @@ export const copy = () => {
  */
 export const clean = () => del([ 'dist' ]);
 
+export const pot = () => {
+	return src( '**/*.php' )
+		.pipe(
+			wpPot({
+				domain: '_themename',
+				package: info.name
+			})
+		)
+		.pipe( dest( `languages/${info.name}.pot` ) );
+};
+
 export const compress = () => {
 	return src([
 		'**/*',
@@ -121,7 +147,8 @@ export const compress = () => {
 	])
 		.pipe(
 			gulpif(
-				file => 'zip' !== file.relative.split( '.' ).pop(),
+				// prevent bug if there are zip files inside the theme
+				file => file.relative.split( '.' ).pop() !== 'zip',
 				replace( '_themename', info.name )
 			)
 		)
@@ -138,6 +165,6 @@ export const watchForChanges = () => {
 };
 
 export const dev = series( clean, parallel( styles, images, copy, scripts ), serve, watchForChanges );
-export const build = series( clean, parallel( styles, images, copy, scripts ), compress );
+export const build = series( clean, parallel( styles, images, copy, scripts ), pot, compress );
 
 export default dev;
