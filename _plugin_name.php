@@ -29,8 +29,8 @@ function sss_admin_enqueue() {
 //	wp_enqueue_script( 'meida-upload' );
 	wp_enqueue_media();
 
-	wp_enqueue_script('sss-js-loader', SSS_PLUGIN_URL . 'dist/js/admin.js', ['jquery', 'jquery-ui-sortable'], SSS_VERSION );
-	wp_enqueue_style('sss-css-loader', SSS_PLUGIN_URL . 'dist/css/admin.css', [], SSS_VERSION );
+	wp_enqueue_script('sss-admin-js', SSS_PLUGIN_URL . 'dist/js/admin.js', ['jquery', 'jquery-ui-sortable'], SSS_VERSION );
+	wp_enqueue_style('sss-admin-css', SSS_PLUGIN_URL . 'dist/css/admin.css', [], SSS_VERSION );
 }
 add_action('admin_enqueue_scripts', 'sss_admin_enqueue');
 
@@ -189,6 +189,11 @@ function simple_slick_slider_metabox_callback ( $post ) {
 	<?php
 }
 
+/**
+ * Save CPT: Simple Slick Slider post_meta data
+ *
+ * @param $post_id
+ */
 function sss_save_simple_slick_slider_metaboxes( $post_id ) {
 
 	if ( ! isset( $_POST['simple_slick_slider_meta_nonce'] ) ||
@@ -222,3 +227,103 @@ function sss_save_simple_slick_slider_metaboxes( $post_id ) {
 }
 add_action( 'save_post', 'sss_save_simple_slick_slider_metaboxes' );
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Helper utilities
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// @TODO still work pending
+function sss_simple_slick_slider_posts_dropdown( $args = [] ) {
+	$defaults = [
+		'post_type' => 'simple_slick_slider',
+		'orderby' => 'id',
+		'order' => 'ASC',
+		'hide_empty' => 1,
+		'echo' => 1,
+		'option_none_value' => -1,
+		'name' => '',
+		'id' => '',
+		'class' => 'postfrom'
+	];
+	// Parse incoming $args into an array and merge it with $defaults.
+	$parsed_args = wp_parse_args( $args, $defaults );
+	$option_none_value = $parsed_args['option_none_value'];
+
+	$sliders = get_posts( $parsed_args );
+
+	$name     = esc_attr( $parsed_args['name'] );
+	$class    = esc_attr( $parsed_args['class'] );
+	$id       = $parsed_args['id'] ? esc_attr( $parsed_args['id'] ) : $name;
+	$required = $parsed_args['required'] ? 'required' : '';
+
+	if ( ! $parsed_args['hide_if_empty'] || ! empty( $categories ) ) {
+		$output = "<select $required name='$name' id='$id' class='$class'>\n";
+	} else {
+		$output = '';
+	}
+
+	if ( empty( $sliders ) )
+
+	if ( $sliders ) {
+
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Public
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ *
+ */
+function sss_enqueue_public_scripts() {
+	wp_enqueue_script( 'sss-public-js', SSS_PLUGIN_URL . 'dist/js/public.js', ['jquery'], SSS_VERSION, TRUE );
+	wp_enqueue_style( 'sss-public-css', SSS_PLUGIN_URL . 'dist/css/public.css', [], SSS_VERSION );
+}
+add_action( 'wp_enqueue_scripts', 'sss_enqueue_public_scripts' );
+
+function get_slider( $id ) {
+
+	if ( empty( $id ) )
+		return new WP_Error('missing_id', 'please supply valid post id' );
+
+	$slider_arr = get_post( (int) $id, ARRAY_A );
+
+	if ( ! post_type_exists( $slider_arr['post_type'] ) || $slider_arr['post_type'] !== 'simple_slick_slider' )
+		return new WP_Error( 'posttype_not_found', __( 'Post type does not match with given ID' ) );
+
+	$slider_arr_meta = get_post_meta( $slider_arr['ID'], 'simple_slick_slider_slide', true );
+	$slider_arr['slider_meta'] = $slider_arr_meta;
+
+	return $slider_arr;
+}
+
+function render_slider( $slider_array ) {
+//	echo '<pre>';
+//	var_dump( $slider_array );
+//	echo '</pre>';
+
+	if ( $slider_array['slider_meta'] && !empty ( $slider_array['slider_meta'] ) ) {
+		echo '<ul>';
+		foreach( $slider_array['slider_meta'] as $slider_meta ) {
+			echo sprintf( '<li>%s</li>', $slider_meta['_slide_name'] );
+		}
+		echo '</ul>';
+	} else {
+		new WP_Error( 'slides_not_found', 'slides not found' );
+	}
+
+
+
+}
+
+// shortcodes
+function simple_slick_slider_shortcode( $atts ) {
+	$a = shortcode_atts( [
+		'slide_id' => '46'
+	], $atts );
+
+	return render_slider( get_slider( $a['slide_id'] ) );
+}
+add_shortcode('simple_slick_slider', 'simple_slick_slider_shortcode' );
+
+// widgets
