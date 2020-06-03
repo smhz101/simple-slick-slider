@@ -24,15 +24,28 @@ define('SSS_TEXT_DOMAIN', 'wptp-sss');
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Admin Enqueue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-function sss_admin_enqueue() {
-//	wp_enqueue_script( 'thickbox' );
-//	wp_enqueue_script( 'meida-upload' );
+function sss_admin_enqueue( $hook ) {
+
+	global $pagenow, $typenow;
+
+	if ( ! is_admin() ) return;
+
 	wp_enqueue_media();
 
-	wp_enqueue_script('sss-admin-js', SSS_PLUGIN_URL . 'dist/js/admin.js', ['jquery', 'jquery-ui-sortable'], SSS_VERSION );
-	wp_enqueue_style('sss-admin-css', SSS_PLUGIN_URL . 'dist/css/admin.css', [], SSS_VERSION );
+	if ( 'post.php' === $pagenow && isset( $_GET['post'] ) && 'simple_slick_slider' === $typenow ) {
+		wp_enqueue_style('sss-admin-css', SSS_PLUGIN_URL . 'dist/css/admin.css', [], SSS_VERSION );
+
+		wp_enqueue_script('sss-admin-js', SSS_PLUGIN_URL . 'dist/js/admin.js', ['jquery', 'jquery-ui-sortable'], SSS_VERSION );
+		wp_localize_script( 'sss-admin-js', 'meta_image',
+			array(
+				'title' => __( 'Choose or Upload Media', SSS_TEXT_DOMAIN ),
+				'button' => __( 'Use this media', SSS_TEXT_DOMAIN ),
+			)
+		);
+		wp_enqueue_script( 'sss-meta-box' );
+	}
 }
-add_action('admin_enqueue_scripts', 'sss_admin_enqueue');
+add_action('admin_enqueue_scripts', 'sss_admin_enqueue', 10, 1);
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -147,21 +160,35 @@ function simple_slick_slider_metabox_callback ( $post ) {
 							<div id="collapse<?php echo $k; ?>" class="collapse" aria-labelledby="slideHeading<?php echo $k; ?>" data-parent="#sliderAccordion">
 								<div class="card-body">
 									<div class="form-group row">
-										<label for="slideTitle" class="col-sm-3 col-form-label">Title</label>
+										<label class="col-sm-3 col-form-label">Title</label>
 										<div class="col-sm-9">
 											<input type="text"
 											       name="simple_slick_slider[<?php echo $k; ?>][_slide_name]"
-											       class="reqular-text"
-											       id="slideTitle"
+											       class="reqular-text slideTitle"
 											       value="<?php echo esc_attr( $slide_meta['_slide_name'] ); ?>" />
 										</div>
 									</div>
 									<div class="form-group row">
-										<label for="slideMainImage" class="col-sm-3 col-form-label">Slider Image</label>
+										<label for="sss-main-image-<?php echo $k; ?>" class="col-sm-3 col-form-label">
+											Slider Image
+										</label>
 										<div class="col-sm-9">
 											<div class="form-group">
-												<input type="text" name="simple_slick_slider[<?php echo $k; ?>][_slide_main_image]" id="main_image_url" class="regular-text" value="" />
-												<input type="button" name="upload-btn" id="slideMainImage" class="button-primary" value="Upload Slide Image">
+												<input id="sss-main-image-<?php echo $k; ?>"
+												       type="text"
+												       name="simple_slick_slider[<?php echo $k; ?>][_slide_main_image]"
+												       class="regular-text main_image_url"
+												       value="<?php echo esc_attr( $slide_meta['_slide_main_image'] ); ?>" />
+												<div class="preview">
+													<?php if( isset( $slide_meta['_slide_main_image'] ) && $slide_meta['_slide_main_image'] ) : ?>
+													<img src="<?php echo esc_attr( $slide_meta['_slide_main_image'] ); ?>" alt="" width="120" height="120" />
+													<?php endif; ?>
+												</div>
+												<input type="button"
+												       name="upload-btn"
+												       class="button-primary slideMainImage"
+												       value="Upload Slide Image"
+												       data-media-uploader-target="#sss-main-image-<?php echo $k; ?>">
 											</div>
 										</div>
 									</div>
@@ -169,8 +196,21 @@ function simple_slick_slider_metabox_callback ( $post ) {
 										<label for="slideThumbnail" class="col-sm-3 col-form-label">Slider Thumbnail</label>
 										<div class="col-sm-9">
 											<div class="form-group">
-												<input type="text" name="simple_slick_slider[<?php echo $k; ?>][_slide_thumb_image]" id="thumb_img_url" class="regular-text" value="" />
-												<input type="button" name="upload-btn" id="slideThumbnail" class="button-primary" value="Upload Thumb Image">
+												<input id="sss-thumb-image-<?php echo $k; ?>"
+												       type="text"
+												       name="simple_slick_slider[<?php echo $k; ?>][_slide_thumb_image]"
+												       class="regular-text thumb_img_url"
+												       value="<?php echo esc_attr( $slide_meta['_slide_thumb_image'] ); ?>" />
+												<div class="preview">
+													<?php if( isset( $slide_meta['_slide_thumb_image'] ) && $slide_meta['_slide_thumb_image'] ) : ?>
+														<img src="<?php echo esc_attr( $slide_meta['_slide_thumb_image'] ); ?>" alt="" width="120" height="120" />
+													<?php endif; ?>
+												</div>
+												<input type="button"
+												       name="upload-btn"
+												       class="button-primary slideThumbnail"
+												       value="Upload Thumbnail"
+												       data-media-uploader-target="#sss-thumb-image-<?php echo $k; ?>">
 											</div>
 										</div>
 									</div>
@@ -208,12 +248,22 @@ function sss_save_simple_slick_slider_metaboxes( $post_id ) {
 
 	$slides = $_POST['simple_slick_slider'];
 
-	//	print_r( $_POST['simple_slick_slider'] );
-	//	$tmp = fopen(dirname(__file__).'/my_logs.txt', "a+"); fwrite($tmp,"\r\n\r\n".ob_get_contents());fclose($tmp);
-	//	die();
+//		print_r( $_POST['simple_slick_slider'] );
+//		$tmp = fopen(dirname(__file__).'/my_logs.txt', "a+"); fwrite($tmp,"\r\n\r\n".ob_get_contents());fclose($tmp);
+//		die();
+
+	$_slides = [];
+	$slides_count = count( $slides );
+	// reindexing array
+	if ( $slides_count && $slides_count > 0 ) {
+		foreach($slides as $index => $slide) {
+			$_slides[] = $slide;
+		}
+	}
 
 	// data sanitization
-	foreach( $slides as $i => $slide ) {
+	foreach( $_slides as $i => $slide ) {
+		++$i;
 		foreach( $slide as $k => $data ) {
 			$new_slide_meta[$i][$k] = stripslashes( strip_tags( $data ) );
 		}
@@ -273,7 +323,7 @@ function sss_simple_slick_slider_posts_dropdown( $args = [] ) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- *
+ * Enqueue scripts
  */
 function sss_enqueue_public_scripts() {
 	wp_enqueue_script( 'sss-public-js', SSS_PLUGIN_URL . 'dist/js/public.js', ['jquery'], SSS_VERSION, TRUE );
@@ -281,6 +331,9 @@ function sss_enqueue_public_scripts() {
 }
 add_action( 'wp_enqueue_scripts', 'sss_enqueue_public_scripts' );
 
+/**
+ * Shortcode
+ */
 function get_slider( $id ) {
 
 	if ( empty( $id ) )
@@ -299,21 +352,23 @@ function get_slider( $id ) {
 
 function render_slider( $slider_array ) {
 //	echo '<pre>';
-//	var_dump( $slider_array );
+//	var_dump( $slider_array['slider_meta'] );
 //	echo '</pre>';
 
 	if ( $slider_array['slider_meta'] && !empty ( $slider_array['slider_meta'] ) ) {
-		echo '<ul>';
+		echo '<div class="slider slider-single">';
 		foreach( $slider_array['slider_meta'] as $slider_meta ) {
-			echo sprintf( '<li>%s</li>', $slider_meta['_slide_name'] );
+			echo sprintf( '<<div><img src="%s" /></div>', $slider_meta['_slide_main_image'] );
 		}
-		echo '</ul>';
+		echo '</div>';
+		echo '<div class="slider slider-nav">';
+		foreach( $slider_array['slider_meta'] as $slider_meta ) {
+			echo sprintf( '<div class="tippyRender" data-tippy-content="Hello world %2$s"><img src="%1$s"></div>', $slider_meta['_slide_thumb_image'], $slider_meta['_slide_name'] );
+		}
+		echo '</div>';
 	} else {
 		new WP_Error( 'slides_not_found', 'slides not found' );
 	}
-
-
-
 }
 
 // shortcodes
@@ -326,4 +381,75 @@ function simple_slick_slider_shortcode( $atts ) {
 }
 add_shortcode('simple_slick_slider', 'simple_slick_slider_shortcode' );
 
-// widgets
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Widget
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class SSS_Simple_Slick_Slider_Widget extends WP_Widget {
+	/**
+	 * Sets up the widgets name etc
+	 */
+	public function __construct() {
+		$widget_ops = array(
+			'classname' => 'sss_simple_slick_slider_widget',
+			'description' => __( 'Simple Slick Slider Widget.', SSS_TEXT_DOMAIN ),
+		);
+		parent::__construct( 'sss_simple_slick_slider_widget', __( 'Simple Slick Slider', SSS_TEXT_DOMAIN ), $widget_ops );
+	}
+
+	/**
+	 * Outputs the content of the widget
+	 *
+	 * @param array $args
+	 * @param array $instance
+	 */
+	public function widget( $args, $instance ) {
+
+		echo $args['before_widget'];
+
+		if ( ! empty( $instance['title'] ) ) {
+			echo $args['before_title'] . apply_filters( 'widget_title', $instance['title'] ) . $args['after_title'];
+		}
+
+		// outputs the content of the widget
+
+		echo $args['after_widget'];
+	}
+
+	/**
+	 * Outputs the options form on admin
+	 *
+	 * @param array $instance The widget options
+	 */
+	public function form( $instance ) {
+		$title = ! empty( $instance['title'] ) ? $instance['title'] : esc_html__( 'New title', 'text_domain' );
+		?>
+		<p>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>"><?php esc_attr_e( 'Title:', 'text_domain' ); ?></label>
+			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'title' ) ); ?>" type="text" value="<?php echo esc_attr( $title ); ?>">
+		</p>
+		<?php
+	}
+
+	/**
+	 * Processing widget options on save
+	 *
+	 * @param array $new_instance The new options
+	 * @param array $old_instance The previous options
+	 *
+	 * @return array
+	 */
+	public function update( $new_instance, $old_instance ) {
+		// processes widget options to be saved
+		$instance = array();
+		$instance['title'] = ( ! empty( $new_instance['title'] ) ) ? sanitize_text_field( $new_instance['title'] ) : '';
+
+		return $instance;
+	}
+}
+
+function sss_simple_slick_slider_widget_init() {
+	register_widget( 'SSS_Simple_Slick_Slider_Widget' );
+}
+add_action( 'widgets_init', 'sss_simple_slick_slider_widget_init' );

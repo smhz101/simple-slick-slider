@@ -1,3 +1,45 @@
-//$primary: teal;
+// Variables
 
-//@import "../../node_modules/bootstrap/scss/bootstrap";
+//$primary: teal;
+// @import "../../node_modules/bootstrap/scss/bootstrap";
+
+@import '../../node_modules/tippy.js/dist/tippy.css';
+@import '../../node_modules/tippy.js/animations/scale.css';
+
+$slick-arrow-color: orange;
+$slick-loader-path: "../images/" !default;
+$slick-font-path: "../fonts/" !default;
+@import '../../node_modules/slick-carousel/slick/slick.scss';
+@import '../../node_modules/slick-carousel/slick/slick-theme.scss';
+.slider-single > div:nth-child(1n+2) { display: none }
+.slider-single.slick-initialized > div:nth-child(1n+2) { display: block }
+h3 {
+	background: #f0f0f0;
+	color: #3498db;
+	font-size: 2.25rem;
+	margin: .5rem;
+	padding: 2%;
+	position: relative;
+	text-align: center;
+}
+.slider-single h3 {
+	line-height: 10rem;
+}
+.slider-nav h3::before {
+	content: "";
+	display: block;
+	padding-top: 75%;
+}
+.slider-nav h3 span {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+}
+.slider-nav .slick-slide { cursor: pointer; }
+.slick-slide.is-active h3 {
+	color: #c00;
+	background-color: #fff
+}
+
+

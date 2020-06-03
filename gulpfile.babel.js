@@ -87,6 +87,17 @@ export const scripts = () => {
 								presets: [ '@babel/preset-env' ]
 							}
 						}
+					},
+					{
+						test: /\.(svg|gif|png|eot|woff|ttf)$/,
+						use: [
+							{
+								loader: 'url-loader',
+								options: {
+									limit: 8192
+								}
+							}
+						]
 					}
 				]
 			},
