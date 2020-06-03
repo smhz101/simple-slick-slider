@@ -32,7 +32,7 @@ function sss_admin_enqueue( $hook ) {
 
 	wp_enqueue_media();
 
-	if ( 'post.php' === $pagenow && isset( $_GET['post'] ) && 'simple_slick_slider' === $typenow ) {
+	if ( ( $pagenow == 'post-new.php' || $pagenow == 'post.php' ) && 'simple_slick_slider' === $typenow ) {
 		wp_enqueue_style('sss-admin-css', SSS_PLUGIN_URL . 'dist/css/admin.css', [], SSS_VERSION );
 
 		wp_enqueue_script('sss-admin-js', SSS_PLUGIN_URL . 'dist/js/admin.js', ['jquery', 'jquery-ui-sortable'], SSS_VERSION );
@@ -281,42 +281,7 @@ add_action( 'save_post', 'sss_save_simple_slick_slider_metaboxes' );
 /// Helper utilities
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// @TODO still work pending
-function sss_simple_slick_slider_posts_dropdown( $args = [] ) {
-	$defaults = [
-		'post_type' => 'simple_slick_slider',
-		'orderby' => 'id',
-		'order' => 'ASC',
-		'hide_empty' => 1,
-		'echo' => 1,
-		'option_none_value' => -1,
-		'name' => '',
-		'id' => '',
-		'class' => 'postfrom'
-	];
-	// Parse incoming $args into an array and merge it with $defaults.
-	$parsed_args = wp_parse_args( $args, $defaults );
-	$option_none_value = $parsed_args['option_none_value'];
 
-	$sliders = get_posts( $parsed_args );
-
-	$name     = esc_attr( $parsed_args['name'] );
-	$class    = esc_attr( $parsed_args['class'] );
-	$id       = $parsed_args['id'] ? esc_attr( $parsed_args['id'] ) : $name;
-	$required = $parsed_args['required'] ? 'required' : '';
-
-	if ( ! $parsed_args['hide_if_empty'] || ! empty( $categories ) ) {
-		$output = "<select $required name='$name' id='$id' class='$class'>\n";
-	} else {
-		$output = '';
-	}
-
-	if ( empty( $sliders ) )
-
-	if ( $sliders ) {
-
-	}
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Public
@@ -387,10 +352,19 @@ add_shortcode('simple_slick_slider', 'simple_slick_slider_shortcode' );
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class SSS_Simple_Slick_Slider_Widget extends WP_Widget {
+
+	protected $defaults;
+
 	/**
 	 * Sets up the widgets name etc
 	 */
 	public function __construct() {
+
+		$this->defaults = [
+			'title'         => '',
+			'select_slider' => '',
+		];
+
 		$widget_ops = array(
 			'classname' => 'sss_simple_slick_slider_widget',
 			'description' => __( 'Simple Slick Slider Widget.', SSS_TEXT_DOMAIN ),
@@ -413,6 +387,7 @@ class SSS_Simple_Slick_Slider_Widget extends WP_Widget {
 		}
 
 		// outputs the content of the widget
+		echo render_slider( get_slider( $instance['select_slider'] ) );
 
 		echo $args['after_widget'];
 	}
@@ -423,11 +398,55 @@ class SSS_Simple_Slick_Slider_Widget extends WP_Widget {
 	 * @param array $instance The widget options
 	 */
 	public function form( $instance ) {
-		$title = ! empty( $instance['title'] ) ? $instance['title'] : esc_html__( 'New title', 'text_domain' );
+
+		// Merge with defaults.
+		$instance = wp_parse_args( (array) $instance, $this->defaults );
+
 		?>
 		<p>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>"><?php esc_attr_e( 'Title:', 'text_domain' ); ?></label>
-			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'title' ) ); ?>" type="text" value="<?php echo esc_attr( $title ); ?>">
+			<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>"><?php esc_attr_e( 'Title:', SSS_TEXT_DOMAIN ); ?></label>
+			<input class="widefat"
+			       id="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>"
+			       name="<?php echo esc_attr( $this->get_field_name( 'title' ) ); ?>"
+			       type="text" value="<?php echo esc_attr( $instance['title'] ); ?>">
+		</p>
+		<p>
+			<?php
+
+			$sliders_posts = get_posts( [
+				'post_type' => 'simple_slick_slider',
+				'post_status' => 'publish'
+			] );
+
+			if ( $sliders_posts && isset( $sliders_posts ) ) { ?>
+
+				<label for="<?php echo esc_attr( $this->get_field_id( 'select_slider' ) ); ?>"><?php esc_html_e( 'Select Slider:', SSS_TEXT_DOMAIN ); ?></label>
+				<select id="<?php echo esc_attr( $this->get_field_id( 'select_slider' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'select_slider' ) ); ?>" class="widefat">
+
+				<?php foreach ( $sliders_posts as $sliders_post ) { ?>
+					<option value="<?php echo absint( $sliders_post->ID ); ?>" <?php selected( absint( $sliders_post->ID ), $instance['select_slider'] ); ?>>
+						<?php esc_html_e( $sliders_post->post_title ); ?>
+					</option>
+				<?php } ?>
+
+				</select>
+				<span style="display:block;padding-top:7px;">
+					<a href="<?php echo esc_url_raw( '/wp-admin/post-new.php?post_type=simple_slick_slider' ); ?>">
+						<?php esc_html_e( 'Create new slider', SSS_TEXT_DOMAIN ); ?>
+					</a>
+				</span>
+
+			<?php } else { ?>
+
+				<span style="display:block;padding-top:7px;">
+					<?php esc_html_e( 'Currently you don\'t have any slider, please ', SSS_TEXT_DOMAIN ); ?>
+					<a href="<?php echo esc_url_raw( '/wp-admin/post-new.php?post_type=simple_slick_slider' ); ?>">
+						<?php esc_html_e( 'Create new slider', SSS_TEXT_DOMAIN ); ?>
+					</a>
+				</span>
+
+			<?php } ?>
+
 		</p>
 		<?php
 	}
@@ -444,6 +463,7 @@ class SSS_Simple_Slick_Slider_Widget extends WP_Widget {
 		// processes widget options to be saved
 		$instance = array();
 		$instance['title'] = ( ! empty( $new_instance['title'] ) ) ? sanitize_text_field( $new_instance['title'] ) : '';
+		$instance['select_slider'] =  ( ! empty( $new_instance['select_slider'] ) ) ? absint( $new_instance['select_slider'] ) : '';
 
 		return $instance;
 	}
