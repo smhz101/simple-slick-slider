@@ -21,6 +21,9 @@ define('SSS_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('SSS_PLUGIN_INC', trailingslashit( SSS_PLUGIN_PATH ) . 'includes/');
 define('SSS_TEXT_DOMAIN', 'wptp-sss');
 
+function sss_setup() { }
+add_action( 'init', 'sss_setup' );
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Admin Enqueue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -112,6 +115,25 @@ function sss_create_simple_slick_slider_cpt() {
 }
 add_action( 'init', 'sss_create_simple_slick_slider_cpt', 0 );
 
+function sss_simple_slick_slider_column( $columns ) {
+	unset($columns['date']);
+
+	$columns['shortcode'] = __( 'Shortcode' );
+	$columns['date'] = __( 'Date' );
+
+	return $columns;
+}
+add_filter( 'manage_simple_slick_slider_posts_columns', 'sss_simple_slick_slider_column' );
+
+function sss_simple_slick_slider_columns( $column, $post_id ) {
+	switch ( $column ) {
+		case 'shortcode' :
+			printf( '<code>[simple-slick-slider slide_id="' . $post_id . '"]</code>' );
+			break;
+	}
+}
+add_filter( 'manage_simple_slick_slider_posts_custom_column', 'sss_simple_slick_slider_columns', 10, 3);
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Meta Boxes
@@ -160,7 +182,7 @@ function simple_slick_slider_metabox_callback ( $post ) {
 							<div id="collapse<?php echo $k; ?>" class="collapse" aria-labelledby="slideHeading<?php echo $k; ?>" data-parent="#sliderAccordion">
 								<div class="card-body">
 									<div class="form-group row">
-										<label class="col-sm-3 col-form-label">Title</label>
+										<label class="col-sm-3 col-form-label"><?php esc_attr_e( 'Title:', SSS_TEXT_DOMAIN ); ?></label>
 										<div class="col-sm-9">
 											<input type="text"
 											       name="simple_slick_slider[<?php echo $k; ?>][_slide_name]"
@@ -169,8 +191,14 @@ function simple_slick_slider_metabox_callback ( $post ) {
 										</div>
 									</div>
 									<div class="form-group row">
+										<label class="col-sm-3 col-form-label"><?php esc_attr_e( 'Description:', SSS_TEXT_DOMAIN ); ?></label>
+										<div class="col-sm-9">
+											<textarea name="simple_slick_slider[<?php echo $k; ?>][_slide_desc]" id="" cols="5" rows="3" class="regular-text"><?php esc_attr_e( $slide_meta['_slide_desc'] ); ?></textarea>
+										</div>
+									</div>
+									<div class="form-group row">
 										<label for="sss-main-image-<?php echo $k; ?>" class="col-sm-3 col-form-label">
-											Slider Image
+											<?php esc_attr_e( 'Image:', SSS_TEXT_DOMAIN ); ?>
 										</label>
 										<div class="col-sm-9">
 											<div class="form-group">
@@ -193,7 +221,9 @@ function simple_slick_slider_metabox_callback ( $post ) {
 										</div>
 									</div>
 									<div class="form-group row">
-										<label for="slideThumbnail" class="col-sm-3 col-form-label">Slider Thumbnail</label>
+										<label for="slideThumbnail" class="col-sm-3 col-form-label">
+											<?php esc_attr_e( 'Thumbnail:', SSS_TEXT_DOMAIN ); ?>
+										</label>
 										<div class="col-sm-9">
 											<div class="form-group">
 												<input id="sss-thumb-image-<?php echo $k; ?>"
@@ -275,7 +305,7 @@ function sss_save_simple_slick_slider_metaboxes( $post_id ) {
 		delete_post_meta( $post_id, 'simple_slick_slider_slide', $old_slide_meta );
 
 }
-add_action( 'save_post', 'sss_save_simple_slick_slider_metaboxes' );
+add_action( 'save_post_simple_slick_slider', 'sss_save_simple_slick_slider_metaboxes' );
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Helper utilities
@@ -299,52 +329,45 @@ add_action( 'wp_enqueue_scripts', 'sss_enqueue_public_scripts' );
 /**
  * Shortcode
  */
-function get_slider( $id ) {
+function render_slider( $id ) {
 
-	if ( empty( $id ) )
-		return new WP_Error('missing_id', 'please supply valid post id' );
+	if ( empty( $id ) ) return __( 'Invalid ID', SSS_TEXT_DOMAIN );
 
-	$slider_arr = get_post( (int) $id, ARRAY_A );
+	$slider_array = get_post( (int) $id, ARRAY_A );
 
-	if ( ! post_type_exists( $slider_arr['post_type'] ) || $slider_arr['post_type'] !== 'simple_slick_slider' )
-		return new WP_Error( 'posttype_not_found', __( 'Post type does not match with given ID' ) );
+	if ( ! post_type_exists( $slider_array['post_type'] ) || $slider_array['post_type'] !== 'simple_slick_slider' )
+		return __( 'Post type does not match with given ID' );
 
-	$slider_arr_meta = get_post_meta( $slider_arr['ID'], 'simple_slick_slider_slide', true );
-	$slider_arr['slider_meta'] = $slider_arr_meta;
+	$slider_array['slider_meta'] = get_post_meta( $slider_array['ID'], 'simple_slick_slider_slide', true );
 
-	return $slider_arr;
-}
-
-function render_slider( $slider_array ) {
-//	echo '<pre>';
-//	var_dump( $slider_array['slider_meta'] );
-//	echo '</pre>';
-
-	if ( $slider_array['slider_meta'] && !empty ( $slider_array['slider_meta'] ) ) {
-		echo '<div class="slider slider-single">';
+	$output = '';
+	if ( $slider_array['slider_meta'] ) {
+		$output .= '<div class="slider slider-single">';
+			foreach( $slider_array['slider_meta'] as $slider_meta ) {
+				$output .= sprintf( '<<div><img src="%s" alt="" /></div>', $slider_meta['_slide_main_image'] );
+			}
+		$output .= '</div>';
+		$output .= '<div class="slider slider-nav">';
 		foreach( $slider_array['slider_meta'] as $slider_meta ) {
-			echo sprintf( '<<div><img src="%s" /></div>', $slider_meta['_slide_main_image'] );
+			$output .= sprintf( '<div class="tippyRender" data-tippy-content="Hello world %2$s"><img src="%1$s" alt="" /></div>', $slider_meta['_slide_thumb_image'], $slider_meta['_slide_name'] );
 		}
-		echo '</div>';
-		echo '<div class="slider slider-nav">';
-		foreach( $slider_array['slider_meta'] as $slider_meta ) {
-			echo sprintf( '<div class="tippyRender" data-tippy-content="Hello world %2$s"><img src="%1$s"></div>', $slider_meta['_slide_thumb_image'], $slider_meta['_slide_name'] );
-		}
-		echo '</div>';
+		$output .= '</div>';
 	} else {
-		new WP_Error( 'slides_not_found', 'slides not found' );
+		$output .= __( 'Slider is empty', SSS_TEXT_DOMAIN );
 	}
+
+	return $output;
 }
 
 // shortcodes
 function simple_slick_slider_shortcode( $atts ) {
-	$a = shortcode_atts( [
-		'slide_id' => '46'
+	$attr = shortcode_atts( [
+		'slide_id' => ''
 	], $atts );
 
-	return render_slider( get_slider( $a['slide_id'] ) );
+	return render_slider( $attr['slide_id'] );
 }
-add_shortcode('simple_slick_slider', 'simple_slick_slider_shortcode' );
+add_shortcode('simple-slick-slider', 'simple_slick_slider_shortcode' );
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -387,7 +410,7 @@ class SSS_Simple_Slick_Slider_Widget extends WP_Widget {
 		}
 
 		// outputs the content of the widget
-		echo render_slider( get_slider( $instance['select_slider'] ) );
+		echo render_slider( $instance['select_slider'] );
 
 		echo $args['after_widget'];
 	}
