@@ -4,6 +4,16 @@ import $ from 'jquery';
 // document ready
 $( () => {
 
+	$( '.accordion__header' ).click( function() {
+
+		$( '.accordion__body' ).not( $( this ).next() ).slideUp();
+		$( this ).next().slideToggle();
+
+		$( '.accordion__item' ).not( $( this ).closest( '.accordion__item' ) ).removeClass( 'open-accordion' );
+		$( this ).closest( '.accordion__item' ).toggleClass( 'open-accordion' );
+
+	});
+
 	/**
 	 * Repeatable group fields
 	 *

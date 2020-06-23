@@ -13,6 +13,7 @@ $slick-font-path: "../fonts/" !default;
 @import '../../node_modules/slick-carousel/slick/slick-theme.scss';
 .slider-single > div:nth-child(1n+2) { display: none }
 .slider-single.slick-initialized > div:nth-child(1n+2) { display: block }
+/*
 h3 {
 	background: #f0f0f0;
 	color: #3498db;
@@ -25,6 +26,8 @@ h3 {
 .slider-single h3 {
 	line-height: 10rem;
 }
+*/
+
 .slider-nav h3::before {
 	content: "";
 	display: block;

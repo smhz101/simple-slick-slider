@@ -25,9 +25,116 @@ function sss_setup() { }
 add_action( 'init', 'sss_setup' );
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Helper utilities
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Save post meta / custom field data for simple_slick_slider CPT.
+ *
+ * It verifies the nonce, then checks we're not doing autosave, ajax or a future post request. It then checks the
+ * current user's permissions, before finally* either updating the post meta, or deleting the field if the value was not
+ * truthy.
+ *
+ * By passing an array of fields => values from the same meta box (and therefore same nonce) into the $data argument,
+ * repeated checks against the nonce, request and permissions are avoided.
+ *
+ * @param array $data
+ * @param       $nonce_action
+ * @param       $nonce_name
+ * @param       $post
+ */
+function sss_save_custom_fields( array $data, $nonce_action, $nonce_name, $post ) {
+
+	// Verify the nonce.
+	if ( ! isset( $_POST[ $nonce_name ] ) || ! wp_verify_nonce( $_POST[ $nonce_name ], $nonce_action ) ) {
+		return;
+	}
+
+	// Don't try to save the data under autosave, ajax, or future post.
+	if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+		return;
+	}
+	if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+		return;
+	}
+	if ( defined( 'DOING_CRON' ) && DOING_CRON ) {
+		return;
+	}
+
+	// Grab the post object.
+	$post = get_post( $post );
+
+	// Don't save if WP is creating a revision (same as DOING_AUTOSAVE?).
+	if ( 'revision' === get_post_type( $post ) ) {
+		return;
+	}
+
+	// Check that the user is allowed to edit the post.
+	if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+		return;
+	}
+
+	// Cycle through $data, insert value or delete field.
+	foreach ( (array) $data as $field => $value ) {
+		// Save $value, or delete if the $value is empty.
+		if ( $value ) {
+			update_post_meta( $post->ID, $field, $value );
+		} else {
+			delete_post_meta( $post->ID, $field );
+		}
+	}
+
+}
+
+/**
+ * Return custom field post meta data.
+ *
+ * Return only the first value of custom field. Return empty string if field is blank or not set.
+ *
+ * @param string $field   Custom field key.
+ * @param int    $post_id Optional. Post ID to use for Post Meta lookup, defaults to `get_the_ID()`.
+ * @return string|bool Return value or empty string on failure.
+ */
+function sss_get_custom_field( $field, $post_id = null ) {
+
+	// Use get_the_ID() if no $post_id is specified.
+	$post_id = empty( $post_id ) ? get_the_ID() : $post_id;
+
+	if ( ! $post_id ) {
+		return '';
+	}
+
+	$custom_field = get_post_meta( $post_id, $field, true );
+
+	if ( ! $custom_field ) {
+		return '';
+	}
+
+	return is_array( $custom_field ) ? $custom_field : wp_kses_decode_entities( $custom_field );
+
+}
+
+function sss_get_template_part( $slug, $name = '' ) {
+	$template = '';
+	if ( $name ) {
+		$fallback = SSS_PLUGIN_PATH . "templates/{$slug}-{$name}.php";
+		$template = file_exists( $fallback ) ? $fallback : '';
+	}
+
+	if ( ! $template ) {
+		$fallback = SSS_PLUGIN_PATH . "templates/{$slug}.php";
+		$template = file_exists( $fallback ) ? $fallback : '';
+	}
+
+	if ( $template ) {
+		load_template( $template, false );
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Admin Enqueue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-function sss_admin_enqueue( $hook ) {
+function sss_admin_enqueue() {
 
 	global $pagenow, $typenow;
 
@@ -83,7 +190,7 @@ function sss_create_simple_slick_slider_cpt() {
 		'set_featured_image' => __( 'Set featured image', SSS_TEXT_DOMAIN ),
 		'remove_featured_image' => __( 'Remove featured image', SSS_TEXT_DOMAIN ),
 		'use_featured_image' => __( 'Use as featured image', SSS_TEXT_DOMAIN ),
-		'insert_into_item' => __( 'Insert into Slick Slider', SSS_TEXT_DOMAIN ),
+		'insert_into_item' => __( /** @lang text */ 'Insert into Slick Slider', SSS_TEXT_DOMAIN ),
 		'uploaded_to_this_item' => __( 'Uploaded to this Slick Slider', SSS_TEXT_DOMAIN ),
 		'items_list' => __( 'Slick Slides list', SSS_TEXT_DOMAIN ),
 		'items_list_navigation' => __( 'Slick Slides list navigation', SSS_TEXT_DOMAIN ),
@@ -143,13 +250,88 @@ add_filter( 'manage_simple_slick_slider_posts_custom_column', 'sss_simple_slick_
  * Register Meta boxes for Custom Post Type Slick Slider
  */
 function sss_create_simple_slick_slider_metaboxes() {
-	add_meta_box( 'sss-simple-slick-slider-data', __( 'Slider Settings', SSS_TEXT_DOMAIN ), 'simple_slick_slider_metabox_callback', 'simple_slick_slider', 'normal', 'high' );
+	add_meta_box(
+		'sss-simple-slick-slider-data',
+		__( 'Slides', SSS_TEXT_DOMAIN ),
+		'sss_slides_metabox',
+		'simple_slick_slider',
+		'normal',
+		'high'
+	);
+
+	add_meta_box(
+		'sss-simple-slick-slider-settings',
+		__( 'Settings', SSS_TEXT_DOMAIN ),
+		'sss_settings_metabox',
+		'simple_slick_slider',
+		'side',
+		'high'
+	);
 }
 add_action( 'add_meta_boxes', 'sss_create_simple_slick_slider_metaboxes', 30 );
 
-function simple_slick_slider_metabox_callback ( $post ) {
-	wp_nonce_field( 'simple_slick_slider_meta_nonce', 'simple_slick_slider_meta_nonce' );
+function sss_settings_metabox( $post ) {
 
+	wp_nonce_field( 'sss_slider_settings_save', 'sss_slider_settings_nonce' );
+
+	?>
+	<p>
+		<label for="select_slider_template"><?php esc_html_e( 'Select Templete', SSS_TEXT_DOMAIN ); ?></label>
+		<select id="select_slider_template" name="sss_settings[_slider_template]" class="regular-text">
+			<option value="template-1" <?php selected('template-1', esc_attr( sss_get_custom_field( '_slider_template' ) ) ); ?>>Templete 1</option>
+			<option value="template-2" <?php selected('template-2', esc_attr( sss_get_custom_field( '_slider_template' ) ) ); ?>>Templete 2</option>
+			<option value="template-3" <?php selected('template-3', esc_attr( sss_get_custom_field( '_slider_template' ) ) ); ?>>Templete 3</option>
+		</select>
+	</p>
+	<p>You may choose templete for quick settings:</p>
+
+	<hr />
+
+	<div class="accordion">
+		<div class="accordion__item">
+			<div class="accordion__header">
+				<h3>Main Settings</h3>
+			</div>
+			<div class="accordion__body">
+				<p>
+					<label for="slides_to_show"><?php esc_html_e( 'Slides To Show', SSS_TEXT_DOMAIN ); ?></label>
+					<select id="slides_to_show" name="sss_settings[_slides_to_show]" class="regular-text">
+						<option value="1" <?php selected('1', esc_attr( sss_get_custom_field( '_slides_to_show' ) ) ); ?>>1</option>
+						<option value="2" <?php selected('2', esc_attr( sss_get_custom_field( '_slides_to_show' ) ) ); ?>>2</option>
+						<option value="3" <?php selected('3', esc_attr( sss_get_custom_field( '_slides_to_show' ) ) ); ?>>3</option>
+					</select>
+				</p>
+
+				<p>
+					<label for="slides_to_scroll"><?php esc_html_e( 'Slides to Scroll', SSS_TEXT_DOMAIN ); ?></label>
+					<select id="slides_to_scroll" name="sss_settings[_slides_to_scroll]" class="regular-text">
+						<option value="1" <?php selected('1', esc_attr( sss_get_custom_field( '_slides_to_scroll' ) ) ); ?>>1</option>
+						<option value="2" <?php selected('2', esc_attr( sss_get_custom_field( '_slides_to_scroll' ) ) ); ?>>2</option>
+						<option value="3" <?php selected('3', esc_attr( sss_get_custom_field( '_slides_to_scroll' ) ) ); ?>>3</option>
+					</select>
+				</p>
+			</div>
+		</div>
+
+		<div class="accordion__item">
+			<div class="accordion__header">
+				<h3>Transition</h3>
+			</div>
+			<div class="accordion__body"></div>
+		</div>
+
+		<div class="accordion__item">
+			<div class="accordion__header">
+				<h3>Lazy Loading</h3>
+			</div>
+			<div class="accordion__body"></div>
+		</div>
+	</div>
+	<?php
+}
+
+function sss_slides_metabox ( $post ) {
+	wp_nonce_field( 'simple_slick_slider_meta_nonce', 'simple_slick_slider_meta_nonce' );
 	$slides_meta = get_post_meta( $post->ID, 'simple_slick_slider_slide', true );
 
 //	echo '<pre>';
@@ -158,18 +340,11 @@ function simple_slick_slider_metabox_callback ( $post ) {
 
 	?>
 	<div class="panel-wrap slides-source">
-		<?php // @TODO slider source selection ?>
-
-<!--		<div class="slides-source">-->
-<!--			<p>-->
-<!--				<label for="wdm_new_field">--><?php //_e( "Choose value:", 'choose_value' ); ?><!--</label><br />-->
-<!--				<input type="radio" name="the_name_of_the_radio_buttons" value="custom" --><?php //checked( $value, 'custom' ); ?><!-- >Custom-->
-<!--				<input type="radio" name="the_name_of_the_radio_buttons" value="wpposts" --><?php //checked( $value, 'wpposts' ); ?><!-- >Posts-->
-<!--			</p>-->
-<!--		</div>-->
 
 		<div class="slide-pannels">
-			<p class="mt-3"><button id="addNewSlideBtn" class="btn btn-primary btn-sm">Add a slide</button></p>
+			<p class="mt-3">
+				<button id="addNewSlideBtn" class="button button-primary button-large"><?php esc_html_e( 'Add a slide', SSS_TEXT_DOMAIN ); ?></button>
+			</p>
 			<div class="accordion" id="sliderAccordion">
 			<?php
 				if ( $slides_meta && isset( $slides_meta ) ) {
@@ -182,18 +357,22 @@ function simple_slick_slider_metabox_callback ( $post ) {
 							<div id="collapse<?php echo $k; ?>" class="collapse" aria-labelledby="slideHeading<?php echo $k; ?>" data-parent="#sliderAccordion">
 								<div class="card-body">
 									<div class="form-group row">
-										<label class="col-sm-3 col-form-label"><?php esc_attr_e( 'Title:', SSS_TEXT_DOMAIN ); ?></label>
+										<label for="sss-slide-title-<?php echo $k; ?>" class="col-sm-3 col-form-label"><?php esc_attr_e( 'Title:', SSS_TEXT_DOMAIN ); ?></label>
 										<div class="col-sm-9">
-											<input type="text"
+											<input id="sss-slide-title-<?php echo $k; ?>"
+											       type="text"
 											       name="simple_slick_slider[<?php echo $k; ?>][_slide_name]"
 											       class="reqular-text slideTitle"
 											       value="<?php echo esc_attr( $slide_meta['_slide_name'] ); ?>" />
 										</div>
 									</div>
 									<div class="form-group row">
-										<label class="col-sm-3 col-form-label"><?php esc_attr_e( 'Description:', SSS_TEXT_DOMAIN ); ?></label>
+										<label for="sss-slide-desc-<?php echo $k; ?>" class="col-sm-3 col-form-label"><?php esc_attr_e( 'Description:', SSS_TEXT_DOMAIN ); ?></label>
 										<div class="col-sm-9">
-											<textarea name="simple_slick_slider[<?php echo $k; ?>][_slide_desc]" id="" cols="5" rows="3" class="regular-text"><?php esc_attr_e( $slide_meta['_slide_desc'] ); ?></textarea>
+											<textarea id="sss-slide-desc-<?php echo $k; ?>"
+											          name="simple_slick_slider[<?php echo $k; ?>][_slide_desc]"
+											          cols="5" rows="3"
+											          class="regular-text"><?php esc_attr_e( $slide_meta['_slide_desc'] ); ?></textarea>
 										</div>
 									</div>
 									<div class="form-group row">
@@ -221,7 +400,7 @@ function simple_slick_slider_metabox_callback ( $post ) {
 										</div>
 									</div>
 									<div class="form-group row">
-										<label for="slideThumbnail" class="col-sm-3 col-form-label">
+										<label for="sss-thumb-image-<?php echo $k; ?>" class="col-sm-3 col-form-label">
 											<?php esc_attr_e( 'Thumbnail:', SSS_TEXT_DOMAIN ); ?>
 										</label>
 										<div class="col-sm-9">
@@ -266,8 +445,7 @@ function simple_slick_slider_metabox_callback ( $post ) {
  */
 function sss_save_simple_slick_slider_metaboxes( $post_id ) {
 
-	if ( ! isset( $_POST['simple_slick_slider_meta_nonce'] ) ||
-	     ! wp_verify_nonce( $_POST['simple_slick_slider_meta_nonce'], 'simple_slick_slider_meta_nonce' ) )
+	if ( ! isset( $_POST['simple_slick_slider_meta_nonce'] ) || ! wp_verify_nonce( $_POST['simple_slick_slider_meta_nonce'], 'simple_slick_slider_meta_nonce' ) )
 		return;
 
 	if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) return;
@@ -276,9 +454,10 @@ function sss_save_simple_slick_slider_metaboxes( $post_id ) {
 	$old_slide_meta = get_post_meta( $post_id, 'simple_slick_slider_slide', true);
 	$new_slide_meta = [];
 
+
 	$slides = $_POST['simple_slick_slider'];
 
-//		print_r( $_POST['simple_slick_slider'] );
+//	    print_r( $slides );
 //		$tmp = fopen(dirname(__file__).'/my_logs.txt', "a+"); fwrite($tmp,"\r\n\r\n".ob_get_contents());fclose($tmp);
 //		die();
 
@@ -299,19 +478,41 @@ function sss_save_simple_slick_slider_metaboxes( $post_id ) {
 		}
 	}
 
-	if ( !empty( $new_slide_meta ) && $new_slide_meta != $old_slide_meta )
+	if ( !empty( $new_slide_meta ) && $new_slide_meta != $old_slide_meta ) {
 		update_post_meta( $post_id, 'simple_slick_slider_slide', $new_slide_meta );
-	elseif ( empty($new_slide_meta) && $old_slide_meta )
+	} elseif ( empty($new_slide_meta) && $old_slide_meta ) {
 		delete_post_meta( $post_id, 'simple_slick_slider_slide', $old_slide_meta );
+	}
 
 }
 add_action( 'save_post_simple_slick_slider', 'sss_save_simple_slick_slider_metaboxes' );
+function sss_save_slider_settings( $post_id, $post ) {
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Helper utilities
-////////////////////////////////////////////////////////////////////////////////////////////////////
+	if ( ! isset( $_POST['sss_settings'] ) ) {
+		return;
+	}
 
+	// Merge user submitted options with fallback defaults.
+	$data = wp_parse_args(
+		$_POST['sss_settings'],
+		array(
+			'_slider_template'  => 'template-1',
+			'_slides_to_show'   => 1,
+			'_slides_to_scroll' => 2,
+		)
+	);
 
+	// Sanitize the title, description, and tags.
+	foreach ( (array) $data as $key => $value ) {
+		if ( in_array( $key, array( '_slider_template', '_slides_to_show', '_slides_to_scroll' ) ) ) {
+			$data[ $key ] = wp_strip_all_tags( $value );
+		}
+	}
+
+	sss_save_custom_fields( $data, 'sss_slider_settings_save', 'sss_slider_settings_nonce', $post );
+
+}
+add_action( 'save_post', 'sss_save_slider_settings', 1, 2 );
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Public
@@ -326,8 +527,15 @@ function sss_enqueue_public_scripts() {
 }
 add_action( 'wp_enqueue_scripts', 'sss_enqueue_public_scripts' );
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Shortcodes
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /**
- * Shortcode
+ * @param $id
+ *
+ * @return string|void
  */
 function render_slider( $id ) {
 
@@ -338,25 +546,37 @@ function render_slider( $id ) {
 	if ( ! post_type_exists( $slider_array['post_type'] ) || $slider_array['post_type'] !== 'simple_slick_slider' )
 		return __( 'Post type does not match with given ID' );
 
-	$slider_array['slider_meta'] = get_post_meta( $slider_array['ID'], 'simple_slick_slider_slide', true );
+	$_slides = sss_get_custom_field('simple_slick_slider_slide', $id );
+	$_template = sss_get_custom_field('_slider_template', $id );
 
-	$output = '';
-	if ( $slider_array['slider_meta'] ) {
-		$output .= '<div class="slider slider-single">';
-			foreach( $slider_array['slider_meta'] as $slider_meta ) {
-				$output .= sprintf( '<<div><img src="%s" alt="" /></div>', $slider_meta['_slide_main_image'] );
-			}
-		$output .= '</div>';
-		$output .= '<div class="slider slider-nav">';
-		foreach( $slider_array['slider_meta'] as $slider_meta ) {
-			$output .= sprintf( '<div class="tippyRender" data-tippy-content="Hello world %2$s"><img src="%1$s" alt="" /></div>', $slider_meta['_slide_thumb_image'], $slider_meta['_slide_name'] );
-		}
-		$output .= '</div>';
+//	$_settings = get_post_meta( $slider_array['ID'], 'sss_settings', true );
+//	$_template_loader = $_settings['_slider_template'];
+//
+	set_query_var( 'slides', $_slides );
+
+	if ( $_template && isset( $_template ) ) {
+		sss_get_template_part( $_template );
 	} else {
-		$output .= __( 'Slider is empty', SSS_TEXT_DOMAIN );
+		sss_get_template_part( 'template-1' );
 	}
 
-	return $output;
+//	$output = '';
+//	if ( $slider_array['slider_meta'] ) {
+//		$output .= '<div class="slider slider-single">';
+//			foreach( $slider_array['slider_meta'] as $slider_meta ) {
+//				$output .= sprintf( '<<div><img src="%s" alt="" /></div>', $slider_meta['_slide_main_image'] );
+//			}
+//		$output .= '</div>';
+//		$output .= '<div class="slider slider-nav">';
+//		foreach( $slider_array['slider_meta'] as $slider_meta ) {
+//			$output .= sprintf( '<div class="tippyRender" data-tippy-content="Hello world %2$s"><img src="%1$s" alt="" /></div>', $slider_meta['_slide_thumb_image'], $slider_meta['_slide_name'] );
+//		}
+//		$output .= '</div>';
+//	} else {
+//		$output .= __( 'Slider is empty', SSS_TEXT_DOMAIN );
+//	}
+//
+//	return $output;
 }
 
 // shortcodes
