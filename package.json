@@ -43,6 +43,6 @@
   "dependencies": {
     "bootstrap": "^4.5.1",
     "slick-carousel": "^1.8.1",
-    "tippy.js": "^6.2.3"
+    "tippy.js": "^6.2.4"
   }
 }
